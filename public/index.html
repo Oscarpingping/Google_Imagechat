@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片对话</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+        }
+        #chat-container {
+            flex: 1;
+            margin-right: 20px;
+            max-width: 60%;
+        }
+        #image-display {
+            margin-top: 92px;
+            width: 5in;
+            height: 5in;
+            border: 1px solid #ccc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        #uploaded-image {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        #chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+        #input-container {
+            display: flex;
+        }
+        #message-input {
+            flex-grow: 1;
+            margin-right: 10px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .ai-message {
+            background-color: #e6f3ff;
+            text-align: left;
+        }
+        .user-message {
+            background-color: #f0f0f0;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <h3>图片对话</h3>
+
+        <div id="image-container">
+            <input type="file" id="image-upload" accept="image/*">
+        </div>
+
+        <div id="chat-messages"></div>
+
+        <div id="input-container">
+            <input type="text" id="message-input" placeholder="输入消息...">
+            <button id="send-button">发送</button>
+        </div>
+    </div>
+
+    <div id="image-display">
+        <img id="uploaded-image" style="display: none;">
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        
+        const imageUpload = document.getElementById('image-upload');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const chatMessages = document.getElementById('chat-messages');
+        const uploadedImage = document.getElementById('uploaded-image');
+
+        function displayMessage(sender, message) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('message');
+            messageElement.classList.add(sender === 'AI' ? 'ai-message' : 'user-message');
+            messageElement.textContent = `${sender === 'AI' ? 'AI: ' : '你: '}${message}`;
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        imageUpload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    uploadedImage.src = e.target.result;
+                    uploadedImage.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+
+                const formData = new FormData();
+                formData.append('image', file);
+
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log("Uploaded image path:", data.path);
+
+                    socket.emit('upload', {
+                        path: data.path,
+                        mimeType: data.mimeType,
+                        initialPrompt: "让我们用中文来讨论这张图片，这上面是什么？"
+                    });
+
+                    displayMessage('你', '上传了一张图片');
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('上传图片时发生错误');
+                });
+            }
+        });
+
+        sendButton.addEventListener('click', () => {
+            const message = messageInput.value;
+            if (message.trim()) {
+                socket.emit('message', message);
+                displayMessage('你', message);
+                messageInput.value = '';
+            }
+        });
+
+        socket.on('message', (msg) => {
+            displayMessage('AI', msg);
+        });
+
+        socket.on('error', (error) => {
+            console.error('Server error:', error);
+            alert('发生错误: ' + error);
+        });
+    </script>
+</body>
+</html>

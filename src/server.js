@@ -1,3 +1,4 @@
+require('dotenv').config({ path: '../.env' });
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -23,10 +24,16 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
+// 调试环境变量
+console.log('Debug: API_KEY exists:', !!process.env.API_KEY);
+console.log('Debug: API_KEY length:', process.env.API_KEY ? process.env.API_KEY.length : 'undefined');
+console.log('Debug: Working directory:', process.cwd());
+
 // 初始化 Google Generative AI
 const genAI = new GoogleGenerativeAI(process.env.API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
-// const model = genAI.getGenerativeModel({model: 'gemini-1.0-pro-vision-latest'});
+// 使用支持视觉的模型
+const textModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const visionModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 // 辅助函数：从文件读取图像
 function fileToGenerativePart(path, mimeType) {
@@ -49,9 +56,9 @@ io.on('connection', (socket) => {
       if (!currentChat) {
         // 如果没有当前会话，创建新会话
         console.log('Starting new chat with message:', msg);
-        const result = await model.generateContent([msg]);
-        const response = await result.response;
-        currentChat = model.startChat({
+        const result = await textModel.generateContent([msg]);
+        const response = result.response;
+        currentChat = textModel.startChat({
           history: [
             { role: "user", parts: [{ text: msg }] },
             { role: "model", parts: [{ text: response.text() }] }
@@ -63,13 +70,13 @@ io.on('connection', (socket) => {
         // 使用现有会话发送消息
         console.log('Sending message to existing chat:', msg);
         const result = await currentChat.sendMessage(msg);
-        const response = await result.response;
+        const response = result.response;
         console.log('AI response:', response.text());
         socket.emit('message', response.text());
       }
     } catch (error) {
       console.error('Error processing message:', error);
-      socket.emit('error', 'An error occurred while processing your message.');
+      socket.emit('message', '抱歉，处理消息时出现错误：' + error.message);
     }
   });
 
@@ -129,13 +136,13 @@ socket.on('upload', async (data) => {
       console.log('Image processed successfully');
   
       console.log('Sending request to AI model...');
-      const result = await model.generateContent([initialPrompt, imagePart]);
-      const response = await result.response;
+      const result = await visionModel.generateContent([initialPrompt, imagePart]);
+      const response = result.response;
       console.log('AI response received');
       console.log('AI response to image:', response.text());
   
       // 启动新会话
-      currentChat = model.startChat({
+      currentChat = visionModel.startChat({
         history: [
           { role: "user", parts: [{ text: initialPrompt }, imagePart] },
           { role: "model", parts: [{ text: response.text() }] }
@@ -147,7 +154,7 @@ socket.on('upload', async (data) => {
       console.log('Response sent to client');
     } catch (error) {
       console.error('Error processing image:', error);
-      socket.emit('error', 'An error occurred while processing the image: ' + error.message);
+      socket.emit('message', '抱歉，处理图片时出现错误：' + error.message);
     }
   });
 

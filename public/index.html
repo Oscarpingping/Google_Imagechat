@@ -83,7 +83,13 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
+        // 配置 Socket.IO 连接选项
+        const socket = io({
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 5,
+            timeout: 20000
+        });
         
         const imageUpload = document.getElementById('image-upload');
         const messageInput = document.getElementById('message-input');
@@ -91,11 +97,59 @@
         const chatMessages = document.getElementById('chat-messages');
         const uploadedImage = document.getElementById('uploaded-image');
 
+        // 连接状态管理
+        socket.on('connect', () => {
+            console.log('已连接到服务器');
+            displayMessage('系统', '已连接到服务器');
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.log('与服务器断开连接:', reason);
+            displayMessage('系统', '与服务器断开连接，正在尝试重连...');
+        });
+
+        socket.on('reconnect', (attemptNumber) => {
+            console.log('重新连接成功，尝试次数:', attemptNumber);
+            displayMessage('系统', '重新连接成功');
+        });
+
+        socket.on('reconnect_error', (error) => {
+            console.log('重连失败:', error);
+            displayMessage('系统', '重连失败，请刷新页面');
+        });
+
+        // 处理服务器心跳
+        socket.on('heartbeat', (data) => {
+            console.log('收到服务器心跳:', data.timestamp);
+            // 响应心跳
+            socket.emit('heartbeat_response');
+        });
+
+        // 客户端主动心跳（每5分钟）
+        setInterval(() => {
+            if (socket.connected) {
+                socket.emit('heartbeat_response');
+                console.log('发送客户端心跳');
+            }
+        }, 5 * 60 * 1000);
+
         function displayMessage(sender, message) {
             const messageElement = document.createElement('div');
             messageElement.classList.add('message');
-            messageElement.classList.add(sender === 'AI' ? 'ai-message' : 'user-message');
-            messageElement.textContent = `${sender === 'AI' ? 'AI: ' : '你: '}${message}`;
+            
+            if (sender === 'AI') {
+                messageElement.classList.add('ai-message');
+                messageElement.textContent = `AI: ${message}`;
+            } else if (sender === '系统') {
+                messageElement.classList.add('ai-message');
+                messageElement.style.color = '#666';
+                messageElement.style.fontStyle = 'italic';
+                messageElement.textContent = `[系统] ${message}`;
+            } else {
+                messageElement.classList.add('user-message');
+                messageElement.textContent = `你: ${message}`;
+            }
+            
             chatMessages.appendChild(messageElement);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
@@ -124,7 +178,7 @@
                     socket.emit('upload', {
                         path: data.path,
                         mimeType: data.mimeType,
-                        initialPrompt: "让我们用中文来讨论这张图片，这上面是什么？"
+                        initialPrompt: "你是一名富有经验的学习辅导老师。 你的任务是帮助我理解并掌握解题方法，而不是直接给出最终答案。 请遵循以下原则： - 每次只给一步提示。 - 使用启发式问题引导我思考。 - 当我理解了当前步骤后，再进行下一步。 - 语气友好、耐心。 图片是我遇到的问题，请从第一步开始，引导我思考。如果用户提问与该问题无关，请提示用户聚焦在这个问题上，其它话题再找机会聊"
                     });
 
                     displayMessage('你', '上传了一张图片');
@@ -136,14 +190,52 @@
             }
         });
 
-        sendButton.addEventListener('click', () => {
+        function sendMessage() {
             const message = messageInput.value;
             if (message.trim()) {
-                socket.emit('message', message);
-                displayMessage('你', message);
-                messageInput.value = '';
+                if (socket.connected) {
+                    socket.emit('message', message);
+                    displayMessage('你', message);
+                    messageInput.value = '';
+                } else {
+                    displayMessage('系统', '连接已断开，无法发送消息');
+                }
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
             }
         });
+
+        // 用户活动检测
+        let lastActivity = Date.now();
+        
+        function updateActivity() {
+            lastActivity = Date.now();
+        }
+        
+        // 监听各种用户活动
+        document.addEventListener('click', updateActivity);
+        document.addEventListener('keypress', updateActivity);
+        document.addEventListener('scroll', updateActivity);
+        document.addEventListener('mousemove', updateActivity);
+        
+        // 定期检查用户活动状态
+        setInterval(() => {
+            const timeSinceLastActivity = Date.now() - lastActivity;
+            
+            // 如果用户超过15分钟无活动，显示提示
+            if (timeSinceLastActivity > 15 * 60 * 1000) {
+                if (socket.connected) {
+                    displayMessage('系统', '检测到长时间无活动，连接仍然保持中...');
+                    updateActivity(); // 重置活动时间，避免重复提示
+                }
+            }
+        }, 8 * 60 * 1000); // 每8分钟检查一次
 
         socket.on('message', (msg) => {
             displayMessage('AI', msg);

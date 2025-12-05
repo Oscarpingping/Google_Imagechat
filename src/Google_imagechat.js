@@ -1,11 +1,13 @@
+const path = require('path');
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const multer = require('multer');
 const { GoogleGenerativeAI, HarmBlockThreshold } = require("@google/generative-ai");
 const fs = require('fs');
-const path = require('path');
 const sharp = require('sharp');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const app = express();
 const server = http.createServer(app);
@@ -43,9 +45,35 @@ const upload = multer({
   }
 });
 
-// 初始化 Google Generative AI
-const genAI = new GoogleGenerativeAI(process.env.API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+// --- 代理配置 ---
+const USE_PROXY = process.env.USE_PROXY === 'true';
+const PROXY_URL = process.env.PROXY_URL || 'https://api-proxy.xidtutor.com';
+const GEMINI_API_HOST = 'generativelanguage.googleapis.com';
+
+// 自定义 Fetcher（支持代理分流）
+const customFetcher = (url, init) => {
+  const urlObj = new URL(url);
+  
+  if (USE_PROXY && urlObj.host === GEMINI_API_HOST) {
+    // 通过代理服务器访问 Google API
+    const proxyUrl = url.replace(`https://${GEMINI_API_HOST}`, PROXY_URL);
+    console.log(`[Proxy] Requesting via ${PROXY_URL}`);
+    return fetch(proxyUrl, init);
+  } else {
+    // 直接访问
+    console.log(`[Direct] Requesting ${url}`);
+    return fetch(url, init);
+  }
+};
+
+// 初始化 Google Generative AI（注入自定义 Fetcher）
+const genAI = new GoogleGenerativeAI(process.env.API_KEY, {
+  fetch: customFetcher
+});
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+console.log('API_KEY:', process.env.API_KEY ? '已配置' : '未配置');
+console.log('USE_PROXY:', USE_PROXY);
+console.log('PROXY_URL:', PROXY_URL);
 
 // 辅助函数：从文件读取图像并编码为Base64
 function fileToGenerativePart(filePath, mimeType) {

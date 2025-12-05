@@ -50,14 +50,24 @@ const USE_PROXY = process.env.USE_PROXY === 'true';
 const PROXY_URL = process.env.PROXY_URL || 'https://api-proxy.xidtutor.com';
 const GEMINI_API_HOST = 'generativelanguage.googleapis.com';
 
+console.log('=== 代理配置调试 ===');
+console.log('process.env.USE_PROXY:', process.env.USE_PROXY);
+console.log('USE_PROXY (parsed):', USE_PROXY);
+console.log('PROXY_URL:', PROXY_URL);
+console.log('===================');
+
 // 自定义 Fetcher（支持代理分流）
 const customFetcher = (url, init) => {
   const urlObj = new URL(url);
   
+  console.log(`[Fetcher] URL: ${url}`);
+  console.log(`[Fetcher] Host: ${urlObj.host}`);
+  console.log(`[Fetcher] USE_PROXY: ${USE_PROXY}`);
+  
   if (USE_PROXY && urlObj.host === GEMINI_API_HOST) {
     // 通过代理服务器访问 Google API
     const proxyUrl = url.replace(`https://${GEMINI_API_HOST}`, PROXY_URL);
-    console.log(`[Proxy] Requesting via ${PROXY_URL}`);
+    console.log(`[Proxy] Requesting via ${proxyUrl}`);
     return fetch(proxyUrl, init);
   } else {
     // 直接访问

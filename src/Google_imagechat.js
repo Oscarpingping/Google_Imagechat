@@ -77,9 +77,23 @@ const customFetcher = (url, init) => {
 };
 
 // 初始化 Google Generative AI（注入自定义 Fetcher）
-const genAI = new GoogleGenerativeAI(process.env.API_KEY, {
-  fetch: customFetcher
-});
+// 注意：参数名应该是 fetchImplementation 或直接传入配置对象
+const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+
+// 覆盖全局 fetch（更可靠的方法）
+if (USE_PROXY) {
+  console.log('[Proxy] 覆盖全局 fetch 以使用代理');
+  const originalFetch = global.fetch;
+  global.fetch = function(url, init) {
+    if (typeof url === 'string' && url.includes(GEMINI_API_HOST)) {
+      const proxyUrl = url.replace(`https://${GEMINI_API_HOST}`, PROXY_URL);
+      console.log(`[Proxy] ${url} -> ${proxyUrl}`);
+      return originalFetch(proxyUrl, init);
+    }
+    return originalFetch(url, init);
+  };
+}
+
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 console.log('API_KEY:', process.env.API_KEY ? '已配置' : '未配置');
 console.log('USE_PROXY:', USE_PROXY);

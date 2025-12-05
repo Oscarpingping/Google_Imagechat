@@ -2,9 +2,15 @@
   "name": "google_chat",
   "version": "1.0.0",
   "description": "use google Gemini API to build a chat app",
-  "main": "app.js",
+  "main": "src/Google_imagechat.js",
   "scripts": {
+    "start": "node src/Google_imagechat.js",
+    "dev": "node src/Google_imagechat.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   },
   "author": "",
   "license": "ISC",
@@ -12,13 +18,9 @@
     "@google/generative-ai": "^0.14.1",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
-    "fs": "^0.0.1-security",
-    "http": "^0.0.1-security",
     "https-proxy-agent": "^7.0.6",
     "multer": "^1.4.5-lts.1",
-    "path": "^0.12.7",
-    "readline": "^1.3.0",
     "sharp": "^0.34.5",
-    "socketio": "^1.0.0"
+    "socket.io": "^4.7.2"
   }
 }
